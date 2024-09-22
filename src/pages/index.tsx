@@ -3,108 +3,145 @@ import Image from "next/image";
 import { Inter } from "next/font/google";
 import styles from "@/styles/Home.module.css";
 import { Metas } from "@/utils/metas";
+import HomePage from "@/components/home";
+import { useState, useEffect } from "react";
+
+import { gql } from "@apollo/client";
+import client from "@/utils/appoloClient";
+import _axios from "@/utils/axios";
 
 const inter = Inter({ subsets: ["latin"] });
 
+const getScores = async (addresses: [string]) => {
+  const result = await _axios.post("/scores", {
+    space: "apecoin.eth",
+    network: "1",
+    snapshot: "latest",
+    strategies: [
+      {
+        name: "delegation",
+        network: "1",
+        params: {
+          symbol: "APE (delegated)",
+          strategies: [
+            {
+              name: "erc20-balance-of",
+              params: {
+                symbol: "APE",
+                address: "0x4d224452801aced8b2f0aebe155379bb5d594381",
+                decimals: 18,
+              },
+            },
+            {
+              name: "erc20-votes",
+              params: {
+                symbol: "APE (staked)",
+                address: "0x0187Ae64E905b4FE7Dd1568a5642fbEf05E96e71",
+              },
+            },
+          ],
+        },
+      },
+    ],
+    addresses,
+  });
+
+  return result;
+};
+
 export default function Home() {
+  const [groupedDelegations, setGroupedDelegations] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Recursive function to fetch delegations starting from timestamp 0
+    async function fetchDelegations(
+      lastTimestamp = 0,
+      collectedDelegations = []
+    ) {
+      const { data } = await client.query({
+        query: gql`
+          query GetDelegations($timestamp: Int) {
+            delegations(
+              where: {
+                space_in: ["", "apecoin.eth", "apecoin"]
+                timestamp_gte: $timestamp
+              }
+              first: 1000
+              orderBy: "timestamp"
+              orderDirection: "asc"
+            ) {
+              delegate
+              delegator
+              space
+              timestamp
+            }
+          }
+        `,
+        variables: {
+          timestamp: lastTimestamp,
+        },
+      });
+
+      const newDelegations = data.delegations;
+      const combinedDelegations = [...collectedDelegations, ...newDelegations];
+
+      // If the response contains fewer than 1000 delegations, stop the recursion
+      if (newDelegations.length < 1000) {
+        // Group the delegations by delegate
+        const grouped = combinedDelegations.reduce((acc, delegation) => {
+          if (!acc[delegation.delegate]) {
+            acc[delegation.delegate] = [];
+          }
+          acc[delegation.delegate].push(delegation);
+          return acc;
+        }, {});
+
+        setGroupedDelegations(grouped); // Set the grouped delegations
+        const scores = await getScores(grouped);
+        console.log(scores);
+        setLoading(false); // Data is fully loaded
+        return;
+      }
+
+      // Recursively fetch the next set of delegations
+      const lastFetchedTimestamp =
+        newDelegations[newDelegations.length - 1].timestamp;
+      fetchDelegations(lastFetchedTimestamp, combinedDelegations);
+    }
+
+    // Start fetching delegations from timestamp 0
+    fetchDelegations(0);
+  }, []);
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <>
-      <Metas />
-      <main className={`${styles.main} ${inter.className}`}>
-        <div className={styles.description}>
-          <p>
-            Get started by editing&nbsp;
-            <code className={styles.code}>src/pages/index.tsx</code>
-          </p>
-          <div>
-            <a
-              href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              By{" "}
-              <Image
-                src="/vercel.svg"
-                alt="Vercel Logo"
-                className={styles.vercelLogo}
-                width={100}
-                height={24}
-                priority
-              />
-            </a>
-          </div>
+    <div>
+      <h1>Delegations for Apecoin.eth</h1>
+      {Object.keys(groupedDelegations).map((delegate) => (
+        <div key={delegate}>
+          <h2>Delegate: {delegate}</h2>
+          <ul>
+            {groupedDelegations[delegate].map((delegation, index) => (
+              <li key={index}>
+                <p>
+                  <strong>Delegator:</strong> {delegation.delegator}
+                </p>
+                <p>
+                  <strong>Space:</strong> {delegation.space}
+                </p>
+                <p>
+                  <strong>Timestamp:</strong>{" "}
+                  {new Date(delegation.timestamp * 1000).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        <div className={styles.center}>
-          <Image
-            className={styles.logo}
-            src="/next.svg"
-            alt="Next.js Logo"
-            width={180}
-            height={37}
-            priority
-          />
-        </div>
-
-        <div className={styles.grid}>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2>
-              Docs <span>-&gt;</span>
-            </h2>
-            <p>
-              Find in-depth information about Next.js features and&nbsp;API.
-            </p>
-          </a>
-
-          <a
-            href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2>
-              Learn <span>-&gt;</span>
-            </h2>
-            <p>
-              Learn about Next.js in an interactive course with&nbsp;quizzes!
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2>
-              Templates <span>-&gt;</span>
-            </h2>
-            <p>
-              Discover and deploy boilerplate example Next.js&nbsp;projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <h2>
-              Deploy <span>-&gt;</span>
-            </h2>
-            <p>
-              Instantly deploy your Next.js site to a shareable URL
-              with&nbsp;Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-    </>
+      ))}
+    </div>
   );
 }

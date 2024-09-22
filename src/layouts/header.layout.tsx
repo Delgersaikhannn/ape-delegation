@@ -1,5 +1,5 @@
 import { MAXW } from "@/utils/globals";
-import { HStack, Text } from "@chakra-ui/react";
+import { HStack, Image, Text } from "@chakra-ui/react";
 import { ConnectKitButton } from "connectkit";
 import Link from "next/link";
 
@@ -30,10 +30,10 @@ const Header = () => {
         color="white"
         maxW={MAXW}
         fontWeight={700}
-        fontSize="20px"
       >
-        <Text>NEW HERE SHORTS</Text>
-        <HStack spacing="48px">
+        <Image src="/ape.png" h="24px" />
+        {/* <Text>NEW HERE SHORTS</Text> */}
+        <HStack spacing="48px" fontSize="14px">
           {Paths?.map((el, idx) => (
             <Link key={el.path} href={el.path}>
               <Text>{el.label}</Text>
